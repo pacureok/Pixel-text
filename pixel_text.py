@@ -1,28 +1,36 @@
 from wiki_engine import WikiEngine
 from decision_logic import DecisionLogic
+import requests
 
 class PixelText:
     def __init__(self):
-        self.brain = DecisionLogic()
         self.wiki = WikiEngine()
+        self.logic = DecisionLogic()
+        self.model_url = "http://localhost:11434/api/generate"
 
-    def procesar(self, user_input):
+    def procesar(self, prompt):
         # 1. Identificar qué quiere el usuario
-        intencion = self.brain.identificar_peticion(user_input)
+        categoria = self.logic.identificar_peticion(prompt)
         
         contexto_extra = ""
+        if categoria == "BUSCAR":
+            print(f"🔍 Detectada petición factual. Buscando en Wikipedia...")
+            datos = self.wiki.buscar(prompt)
+            if datos:
+                contexto_extra = f"\nUsa estos datos reales para tu respuesta: {datos}"
         
-        # 2. Si es factual, traemos datos de Wikipedia
-        if intencion == "factual":
-            datos_reales = self.wiki.buscar(user_input)
-            if datos_reales:
-                contexto_extra = f"\nUsa esta información real para tu respuesta: {datos_reales}"
+        # 2. Generar la respuesta final con el LLM
+        full_prompt = f"Instrucción: Responde de forma amable y precisa en español.{contexto_extra}\nUsuario: {prompt}"
         
-        # 3. Generar la respuesta final con Llama-3 usando el contexto (si existe)
-        respuesta_final = self.generar_con_ollama(user_input, contexto_extra, intencion)
-        return respuesta_final
+        payload = {
+            "model": "llama3",
+            "prompt": full_prompt,
+            "stream": False
+        }
 
-    def generar_con_ollama(self, prompt, contexto, intencion):
-        # Aquí haces la llamada final a Ollama para que redacte
-        # Si contexto tiene datos de Wikipedia, la respuesta será veraz.
-        pass
+        response = requests.post(self.model_url, json=payload)
+        return response.json().get("response", "Lo siento, tuve un error interno.")
+
+# --- EJECUCIÓN ---
+bot = PixelText()
+print(bot.procesar("¿Qué es un agujero negro?"))
