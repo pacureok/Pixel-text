@@ -1,44 +1,37 @@
-import re
+import requests
+import json
 
-class DecisionEngine:
-    def __init__(self):
-        # Patrones de texto para decisiones rápidas y precisas
-        self.patterns = {
-            "saludo": r"\b(hola|buenos días|buenas|qué tal|saludos|hey)\b",
-            "historia": r"\b(cuéntame|inventa|crea|narra|escribe|historia|relato|cuento)\b",
-            "investigacion": r"\b(quién|qué es|cómo|cuándo|dónde|por qué|explica|define|datos|historia de|biografía)\b"
+class DecisionLogic:
+    def __init__(self, model="llama3"):
+        self.url = "http://localhost:11434/api/generate"
+        self.model = model
+
+    def identificar_peticion(self, prompt):
+        """Usa Ollama para clasificar la intención del usuario."""
+        instruccion_sistema = (
+            "Eres un clasificador de intenciones. Responde UNICAMENTE con una palabra:\n"
+            "- 'FACTUAL': si el usuario pide información real, ciencia, historia o definiciones.\n"
+            "- 'CREATIVO': si el usuario pide cuentos, poemas, chistes o rol.\n"
+            "- 'SALUDO': si es solo un hola o presentación.\n"
+            f"Usuario dice: {prompt}"
+        )
+
+        payload = {
+            "model": self.model,
+            "prompt": instruccion_sistema,
+            "stream": False
         }
 
-    def limpiar_texto(self, texto):
-        """Limpia el texto para una clasificación sin errores."""
-        texto = texto.lower().strip()
-        # Elimina signos de puntuación innecesarios para el análisis
-        return re.sub(r'[^\w\s\?]', '', texto)
-
-    def clasificar(self, entrada_usuario):
-        """
-        Analiza la entrada y toma una decisión ejecutiva sobre qué flujo seguir.
-        """
-        texto = self.limpiar_texto(entrada_usuario)
-        
-        # 1. Prioridad: ¿Es una petición creativa? (Historias)
-        # Si el usuario pide "inventar", ignoramos los datos fácticos para dar libertad a la IA.
-        if re.search(self.patterns["historia"], texto):
-            return "MODO_CREATIVO"
-
-        # 2. ¿Es una duda sobre el mundo real? (Investigación)
-        # Si hay signos de interrogación o palabras de consulta, activamos Wikipedia.
-        if re.search(self.patterns["investigacion"], texto) or "?" in entrada_usuario:
-            return "MODO_INVESTIGACION"
-
-        # 3. ¿Es interacción social básica? (Saludo)
-        if re.search(self.patterns["saludo"], texto):
-            return "MODO_SOCIAL"
-
-        # 4. Decisión por defecto: Charla normal
-        # Si no encaja en nada, se trata como conversación fluida.
-        return "MODO_CHAT"
-
-    def requiere_busqueda(self, categoria):
-        """Retorna True si la decisión tomada requiere el uso de Wikipedia."""
-        return categoria == "MODO_INVESTIGACION"
+        try:
+            response = requests.post(self.url, json=payload)
+            # Extraemos la categoría limpia
+            categoria = response.json().get("response", "").strip().upper()
+            
+            # Limpieza básica por si el modelo se pone charlatán
+            if "FACTUAL" in categoria: return "factual"
+            if "CREATIVO" in categoria: return "creativo"
+            return "saludo"
+            
+        except Exception as e:
+            print(f"Error conectando con Ollama: {e}")
+            return "factual" # Por defecto intentamos buscar datos si falla la lógica
