@@ -1,62 +1,47 @@
 import requests
-import json
+from wiki_engine import buscar_en_wikipedia
+from decision_logic import clasificar_intencion
 
 class PixelText:
     def __init__(self):
-        self.url_ollama = "http://localhost:11434/api/generate"
-        self.model = "llama3:8b-instruct-q2_K" # Modelo ultra-ligero
+        self.api_url = "http://localhost:11434/api/generate"
+        self.model = "llama3:8b-instruct-q2_K"
 
-    def buscar_wikipedia(self, tema):
-        print(f"🔍 [Pixel-text] Buscando en Wikipedia...")
-        url = f"https://es.wikipedia.org/api/rest_v1/page/summary/{tema.replace(' ', '_')}"
-        try:
-            r = requests.get(url)
-            if r.status_code == 200:
-                return r.json().get('extract', "Sin datos.")
-            return "No lo sé, pero lo buscaré..."
-        except:
-            return "Error de conexión al buscar."
-
-    def procesar(self, entrada):
-        user_input = entrada.lower()
-
-        # 1. Identificar Saludos
-        if any(s in user_input for s in ["hola", "buen día", "qué tal"]):
-            return "¡Hola! Soy Pixel-text de Pacure Labs. ¿En qué te ayudo?"
-
-        # 2. Identificar si quiere una Historia
-        if "cuéntame una historia" in user_input or "inventa" in user_input:
-            print("📖 Generando historia creativa...")
-            return self.llamar_ollama(f"Escribe una historia creativa sobre: {entrada}")
-
-        # 3. Pregunta Fáctica (Evitar alucinación)
-        print("🛡️ Verificando veracidad...")
-        contexto = self.buscar_wikipedia(entrada)
+    def responder(self, prompt):
+        intencion = clasificar_intencion(prompt)
         
-        if contexto == "No lo sé, pero lo buscaré...":
-            return contexto
+        # CASO 1: SALUDO
+        if intencion == "saludo":
+            return "¡Hola! Soy Pixel-text de Pacure Labs. Estoy listo para investigar o charlar."
 
-        prompt = f"Basado únicamente en este texto: '{contexto}', responde la pregunta: {entrada}. Si no está ahí, di que no lo sabes."
-        return self.llamar_ollama(prompt)
+        # CASO 2: HISTORIA (Normal, sin Wikipedia)
+        if intencion == "historia":
+            return self._consultar_ollama(f"Sé creativo y cuéntame: {prompt}")
 
-    def llamar_ollama(self, prompt):
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False
-        }
+        # CASO 3: INVESTIGACIÓN (Usa Wikipedia)
+        if intencion == "investigacion":
+            datos = buscar_en_wikipedia(prompt)
+            if datos:
+                contexto = f"Información real encontrada: {datos['resumen']}"
+                instruccion = f"Basándote en esto: {contexto}, responde a: {prompt}. Sé breve y exacto."
+                return self._consultar_ollama(instruccion)
+            else:
+                return "No lo sé con certeza, pero lo buscaré en otras fuentes más adelante."
+
+        # CASO 4: CHARLA NORMAL
+        return self._consultar_ollama(prompt)
+
+    def _consultar_ollama(self, system_prompt):
+        payload = {"model": self.model, "prompt": system_prompt, "stream": False}
         try:
-            response = requests.post(self.url_ollama, json=payload)
-            return response.json().get('response', "Error en el cerebro.")
+            r = requests.post(self.api_url, json=payload)
+            return r.json().get('response', "Error en el cerebro.")
         except:
-            return "Ollama no está iniciado. Por favor, corre 'ollama serve'."
+            return "Error: Asegúrate de que Ollama esté corriendo."
 
-# --- INICIO DEL PROGRAMA ---
 if __name__ == "__main__":
     bot = PixelText()
-    print("--- Pixel-text por Pacure Labs (Base Ollama) ---")
+    print("--- Pixel-text (Versión Pacure Labs) ---")
     while True:
-        user_text = input("Tú: ")
-        if user_text.lower() in ["salir", "exit"]: break
-        respuesta = bot.procesar(user_text)
-        print(f"Pixel-text: {respuesta}\n")
+        u = input(">> ")
+        print(f"IA: {bot.responder(u)}\n")
