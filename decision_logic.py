@@ -6,32 +6,31 @@ class DecisionLogic:
         self.url = "http://localhost:11434/api/generate"
         self.model = model
 
-    def identificar_peticion(self, prompt):
-        """Usa Ollama para clasificar la intención del usuario."""
-        instruccion_sistema = (
-            "Eres un clasificador de intenciones. Responde UNICAMENTE con una palabra:\n"
-            "- 'FACTUAL': si el usuario pide información real, ciencia, historia o definiciones.\n"
-            "- 'CREATIVO': si el usuario pide cuentos, poemas, chistes o rol.\n"
-            "- 'SALUDO': si es solo un hola o presentación.\n"
-            f"Usuario dice: {prompt}"
-        )
-
+    def identificar_peticion(self, user_input):
+        """Usa Ollama para decidir si la pregunta es FACTUAL (buscar) o CREATIVA (charla)."""
+        prompt = f"""
+        Analiza la siguiente petición del usuario: "{user_input}"
+        Clasifícala en una de estas dos categorías:
+        1. BUSCAR: Si el usuario pregunta por definiciones, historia, ciencia o datos reales.
+        2. CHAT: Si es un saludo, una opinión o pide crear un cuento/poema.
+        
+        Responde ÚNICAMENTE con la palabra 'BUSCAR' o 'CHAT'.
+        """
+        
         payload = {
             "model": self.model,
-            "prompt": instruccion_sistema,
+            "prompt": prompt,
             "stream": False
         }
 
         try:
             response = requests.post(self.url, json=payload)
-            # Extraemos la categoría limpia
-            categoria = response.json().get("response", "").strip().upper()
+            result = response.json().get("response", "").strip().upper()
             
-            # Limpieza básica por si el modelo se pone charlatán
-            if "FACTUAL" in categoria: return "factual"
-            if "CREATIVO" in categoria: return "creativo"
-            return "saludo"
-            
+            # Limpieza básica por si el modelo responde con más texto
+            if "BUSCAR" in result:
+                return "BUSCAR"
+            return "CHAT"
         except Exception as e:
-            print(f"Error conectando con Ollama: {e}")
-            return "factual" # Por defecto intentamos buscar datos si falla la lógica
+            print(f"Error de conexión con Ollama: {e}")
+            return "CHAT" # Por defecto charlar si falla la lógica
