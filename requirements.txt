@@ -1,4 +1,15 @@
-requests==2.31.0
-urllib3==2.0.7
-pip install duckduckgo-search
-# Nota: Requiere Ollama instalado en el sistema
+# --- Core y Conectividad ---
+requests
+urllib3
+
+# --- Motores de Búsqueda ---
+wikipedia
+wikipedia-api
+duckduckgo-search
+
+# --- Procesamiento de Datos y Excel ---
+pandas
+openpyxl
+
+# --- Utilidades ---
+typing-extensions
