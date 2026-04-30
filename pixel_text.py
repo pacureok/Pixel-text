@@ -8,91 +8,77 @@ class PixelText:
         self.api_url = "http://localhost:11434/api/generate"
         self.model = "llama3:8b-instruct-q2_K"
         self.engine = DecisionEngine()
-        self.credito = "Pacure Labs"
+        self.empresa = "Pacure Labs"
 
-    def _consultar_ollama(self, prompt, system_instruction=""):
-        full_prompt = f"Sistema: {system_instruction}\nUsuario: {prompt}\nAsistente:"
+    def _llamar_ollama(self, prompt, sistema=""):
+        """Comunicación directa con Ollama."""
         payload = {
             "model": self.model,
-            "prompt": full_prompt,
+            "prompt": f"System: {sistema}\nUser: {prompt}\nAssistant:",
             "stream": False,
-            "options": {"num_ctx": 2048, "temperature": 0.3} # Temp baja para evitar alucinación
+            "options": {"temperature": 0.2, "num_ctx": 2048}
         }
         try:
-            r = requests.post(self.api_url, json=payload)
-            return r.json().get('response', "").strip()
-        except Exception as e:
-            return f"Error de conexión con el cerebro: {e}"
+            response = requests.post(self.api_url, json=payload)
+            return response.json().get('response', "").strip()
+        except:
+            return "ERROR_CONEXION"
 
-    def autocrítica(self, respuesta, contexto_real):
-        """
-        La IA cuestiona su propia respuesta comparándola con los datos reales.
-        """
-        print("🔍 [Pixel-text] Cuestionando veracidad de la respuesta...")
-        critica_prompt = (
-            f"Contexto real: {contexto_real}\n"
-            f"Respuesta generada: {respuesta}\n"
-            "Pregunta: ¿La respuesta contiene errores o inventa datos que no están en el contexto? "
-            "Responde solo con 'CORRECTO' o 'REHACER'."
+    def cuestionar_respuesta(self, respuesta, contexto):
+        """Sistema de autocrítica para evitar alucinaciones."""
+        print("🛡️ [Pixel-text] Verificando integridad de la respuesta...")
+        prompt_critica = (
+            f"Contexto: {contexto}\n"
+            f"Respuesta: {respuesta}\n"
+            "Pregunta: ¿La respuesta contradice el contexto o inventa datos? Responde solo 'SI' o 'NO'."
         )
-        
-        veredicto = self._consultar_ollama(critica_prompt, "Eres un auditor de datos estricto.")
-        return "REHACER" in veredicto.upper()
+        critica = self._llamar_ollama(prompt_critica, "Eres un verificador de hechos estricto.")
+        return "SI" in critica.upper()
 
-    def procesar(self, user_input):
-        decision = self.engine.clasificar(user_input)
+    def procesar(self, entrada):
+        decision = self.engine.clasificar(entrada)
         
-        # 1. Modo Social
+        # FLUJO 1: Saludos y Social
         if decision == "MODO_SOCIAL":
-            return f"¡Hola! Soy Pixel-text, una creación de {self.credito}. ¿En qué puedo ayudarte hoy?"
+            return f"¡Hola! Soy Pixel-text de {self.empresa}. Mi base de datos está lista para investigar."
 
-        # 2. Modo Creativo (Historias)
+        # FLUJO 2: Creatividad (Historias)
         if decision == "MODO_CREATIVO":
             print("📖 Generando relato creativo...")
-            return self._consultar_ollama(user_input, "Eres un escritor creativo de Pacure Labs.")
+            return self._llamar_ollama(entrada, "Eres un escritor creativo. Puedes imaginar cosas.")
 
-        # 3. Modo Investigación (99.8% Veracidad)
+        # FLUJO 3: Investigación (Veracidad obligatoria)
         if decision == "MODO_INVESTIGACION":
-            datos_wiki = buscar_en_wikipedia(user_input)
+            datos = buscar_en_wikipedia(entrada)
             
-            if not datos_wiki:
-                return "No lo sé con certeza en este momento, pero lo buscaré en otras fuentes para ti."
+            if not datos:
+                return "No lo sé por ahora, pero lo buscaré en otras fuentes."
 
-            contexto = datos_wiki['resumen']
-            instruccion = f"Responde usando solo este contexto: {contexto}. Si no está ahí, di que no lo sabes."
+            contexto = datos['resumen']
+            fuente = datos['fuente']
             
-            # Primer intento
-            respuesta = self._consultar_ollama(user_input, instruccion)
-            
-            # Autocrítica / Revisión
-            if self.autocrítica(respuesta, contexto):
-                print("⚠️ Detectada posible alucinación. Rehaciendo respuesta...")
-                respuesta = self._consultar_ollama(
-                    f"Tu respuesta anterior fue imprecisa. Basándote ESTRICTAMENTE en: {contexto}, responde de nuevo: {user_input}",
-                    "Eres un asistente que no tiene permitido mentir ni inventar."
+            # Intento 1
+            instruccion = f"Responde usando SOLO este contexto: {contexto}. Si no sabes, di 'No lo sé'."
+            respuesta = self._llamar_ollama(entrada, instruccion)
+
+            # Revisión de alucinación
+            if self.cuestionar_respuesta(respuesta, contexto):
+                print("⚠️ Alucinación detectada. Corrigiendo...")
+                respuesta = self._llamar_ollama(
+                    f"Corrige esta respuesta basándote solo en el contexto: {contexto}",
+                    "Eres un asistente que no tiene permitido inventar nada."
                 )
-            
-            return f"{respuesta}\n\n[Fuente: Wikipedia/Pacure Labs]"
 
-        # 4. Modo Chat Normal
-        return self._consultar_ollama(user_input, f"Eres Pixel-text de {self.credito}. Responde de forma clara.")
+            return f"{respuesta}\n\n[Fuente: {fuente} | {self.empresa}]"
 
-# --- INTERFAZ DE CONSOLA ---
+        # Por defecto: Charla normal
+        return self._llamar_ollama(entrada, f"Eres Pixel-text de {self.empresa}.")
+
+# Lanzador
 if __name__ == "__main__":
-    ia = PixelText()
-    print(f"--- PIXEL-TEXT (Base Ollama) | Propiedad de Pacure Labs ---")
-    print("Optimizado para 2GB VRAM / 5GB RAM. Escribe 'salir' para finalizar.\n")
-    
+    bot = PixelText()
+    print(f"--- Pixel-text por {bot.empresa} iniciado ---")
     while True:
-        try:
-            frase = input(">> ")
-            if frase.lower() in ["salir", "exit", "quit"]:
-                break
-                
-            resultado = ia.procesar(frase)
-            print(f"\nPixel-text: {resultado}\n")
-            
-        except KeyboardInterrupt:
-            break
-
-    print("\nApagando Pixel-text. Créditos: Pacure Labs.")
+        u = input("Tú: ")
+        if u.lower() in ["exit", "salir"]: break
+        print(f"Pixel-text: {bot.procesar(u)}\n")
